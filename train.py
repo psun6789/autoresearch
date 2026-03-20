@@ -17,11 +17,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from kernels import get_kernel
-cap = torch.cuda.get_device_capability()
-# varunneal's FA3 is Hopper only, use kernels-community on non-Hopper GPUs
-repo = "varunneal/flash-attention-3" if cap == (9, 0) else "kernels-community/flash-attn3"
-fa3 = get_kernel(repo).flash_attn_interface
+### ==================================================
+# from kernels import get_kernel
+# cap = torch.cuda.get_device_capability()
+# # varunneal's FA3 is Hopper only, use kernels-community on non-Hopper GPUs
+# repo = "varunneal/flash-attention-3" if cap == (9, 0) else "kernels-community/flash-attn3"
+# fa3 = get_kernel(repo).flash_attn_interface
+### ==================================================
+fa3 = None  # Replace above lines with this
+
 
 from prepare import MAX_SEQ_LEN, TIME_BUDGET, Tokenizer, make_dataloader, evaluate_bpb
 
@@ -90,7 +94,26 @@ class CausalSelfAttention(nn.Module):
         q, k = apply_rotary_emb(q, cos, sin), apply_rotary_emb(k, cos, sin)
         q, k = norm(q), norm(k)
 
-        y = fa3.flash_attn_func(q, k, v, causal=True, window_size=window_size)
+        # y = fa3.flash_attn_func(q, k, v, causal=True, window_size=window_size)  # Replace this to below line
+
+        ### ==================================================
+        # convert to (B, heads, T, head_dim)
+        q = q.transpose(1, 2)
+        k = k.transpose(1, 2)
+        v = v.transpose(1, 2)
+
+        # PyTorch attention (fallback)
+        y = torch.nn.functional.scaled_dot_product_attention(
+            q, k, v,
+            attn_mask=None,
+            is_causal=True
+        )
+
+        # back to (B, T, C)
+        y = y.transpose(1, 2).contiguous().view(B, T, -1)
+        ### ==================================================
+
+
         y = y.contiguous().view(B, T, -1)
         y = self.c_proj(y)
         return y
@@ -233,37 +256,54 @@ class GPT(nn.Module):
             'transformer_matrices': transformer_matrices, 'scalars': scalars, 'total': total,
         }
 
-    def setup_optimizer(self, unembedding_lr=0.004, embedding_lr=0.2, matrix_lr=0.02,
-                        weight_decay=0.0, adam_betas=(0.8, 0.95), scalar_lr=0.5):
-        model_dim = self.config.n_embd
-        matrix_params = list(self.transformer.h.parameters())
-        value_embeds_params = list(self.value_embeds.parameters())
-        embedding_params = list(self.transformer.wte.parameters())
-        lm_head_params = list(self.lm_head.parameters())
-        resid_params = [self.resid_lambdas]
-        x0_params = [self.x0_lambdas]
-        assert len(list(self.parameters())) == (len(matrix_params) + len(embedding_params) +
-            len(lm_head_params) + len(value_embeds_params) + len(resid_params) + len(x0_params))
-        # Scale LR ∝ 1/√dmodel (tuned at 768 dim)
-        dmodel_lr_scale = (model_dim / 768) ** -0.5
-        print(f"Scaling AdamW LRs by 1/sqrt({model_dim}/768) = {dmodel_lr_scale:.6f}")
-        param_groups = [
-            dict(kind='adamw', params=lm_head_params, lr=unembedding_lr * dmodel_lr_scale, betas=adam_betas, eps=1e-10, weight_decay=0.0),
-            dict(kind='adamw', params=embedding_params, lr=embedding_lr * dmodel_lr_scale, betas=adam_betas, eps=1e-10, weight_decay=0.0),
-            dict(kind='adamw', params=value_embeds_params, lr=embedding_lr * dmodel_lr_scale, betas=adam_betas, eps=1e-10, weight_decay=0.0),
-            dict(kind='adamw', params=resid_params, lr=scalar_lr * 0.01, betas=adam_betas, eps=1e-10, weight_decay=0.0),
-            dict(kind='adamw', params=x0_params, lr=scalar_lr, betas=(0.96, 0.95), eps=1e-10, weight_decay=0.0),
-        ]
-        for shape in sorted({p.shape for p in matrix_params}):
-            group_params = [p for p in matrix_params if p.shape == shape]
-            param_groups.append(dict(
-                kind='muon', params=group_params, lr=matrix_lr,
-                momentum=0.95, ns_steps=5, beta2=0.95, weight_decay=weight_decay,
-            ))
-        optimizer = MuonAdamW(param_groups)
-        for group in optimizer.param_groups:
-            group["initial_lr"] = group["lr"]
+    # # ============================================================================================================
+    # # Replace this function with below
+    # # ============================================================================================================
+    # def setup_optimizer(self, unembedding_lr=0.004, embedding_lr=0.2, matrix_lr=0.02,
+    #                     weight_decay=0.0, adam_betas=(0.8, 0.95), scalar_lr=0.5):
+    #     model_dim = self.config.n_embd
+    #     matrix_params = list(self.transformer.h.parameters())
+    #     value_embeds_params = list(self.value_embeds.parameters())
+    #     embedding_params = list(self.transformer.wte.parameters())
+    #     lm_head_params = list(self.lm_head.parameters())
+    #     resid_params = [self.resid_lambdas]
+    #     x0_params = [self.x0_lambdas]
+    #     assert len(list(self.parameters())) == (len(matrix_params) + len(embedding_params) +
+    #         len(lm_head_params) + len(value_embeds_params) + len(resid_params) + len(x0_params))
+    #     # Scale LR ∝ 1/√dmodel (tuned at 768 dim)
+    #     dmodel_lr_scale = (model_dim / 768) ** -0.5
+    #     print(f"Scaling AdamW LRs by 1/sqrt({model_dim}/768) = {dmodel_lr_scale:.6f}")
+    #     param_groups = [
+    #         dict(kind='adamw', params=lm_head_params, lr=unembedding_lr * dmodel_lr_scale, betas=adam_betas, eps=1e-10, weight_decay=0.0),
+    #         dict(kind='adamw', params=embedding_params, lr=embedding_lr * dmodel_lr_scale, betas=adam_betas, eps=1e-10, weight_decay=0.0),
+    #         dict(kind='adamw', params=value_embeds_params, lr=embedding_lr * dmodel_lr_scale, betas=adam_betas, eps=1e-10, weight_decay=0.0),
+    #         dict(kind='adamw', params=resid_params, lr=scalar_lr * 0.01, betas=adam_betas, eps=1e-10, weight_decay=0.0),
+    #         dict(kind='adamw', params=x0_params, lr=scalar_lr, betas=(0.96, 0.95), eps=1e-10, weight_decay=0.0),
+    #     ]
+    #     for shape in sorted({p.shape for p in matrix_params}):
+    #         group_params = [p for p in matrix_params if p.shape == shape]
+    #         param_groups.append(dict(
+    #             kind='muon', params=group_params, lr=matrix_lr,
+    #             momentum=0.95, ns_steps=5, beta2=0.95, weight_decay=weight_decay,
+    #         ))
+    #     optimizer = MuonAdamW(param_groups)
+    #     for group in optimizer.param_groups:
+    #         group["initial_lr"] = group["lr"]
+    #     return optimizer
+    # # ============================================================================================================
+
+
+    def setup_optimizer(self, *args, **kwargs):
+        print("Using standard AdamW optimizer (Triton disabled)")
+
+        optimizer = torch.optim.AdamW(
+            self.parameters(),
+            lr=3e-4,
+            betas=(0.9, 0.95),
+            weight_decay=0.01
+            )
         return optimizer
+
 
     def forward(self, idx, targets=None, reduction='mean'):
         B, T = idx.size()
@@ -302,7 +342,10 @@ polar_express_coeffs = [
     (2.3465413258596377, -1.7097828382687081, 0.42323551169305323),
 ]
 
-@torch.compile(dynamic=False, fullgraph=True)
+
+# ------------------------comment---------------------------------------------------
+# @torch.compile(dynamic=False, fullgraph=True)
+# -----------------------------------------------------------------------------------
 def adamw_step_fused(p, grad, exp_avg, exp_avg_sq, step_t, lr_t, beta1_t, beta2_t, eps_t, wd_t):
     p.mul_(1 - lr_t * wd_t)
     exp_avg.lerp_(grad, 1 - beta1_t)
@@ -313,7 +356,10 @@ def adamw_step_fused(p, grad, exp_avg, exp_avg_sq, step_t, lr_t, beta1_t, beta2_
     step_size = lr_t / bias1
     p.add_(exp_avg / denom, alpha=-step_size)
 
-@torch.compile(dynamic=False, fullgraph=True)
+# ------------------------comment---------------------------------------------------
+# @torch.compile(dynamic=False, fullgraph=True)
+# ------------------------comment---------------------------------------------------
+
 def muon_step_fused(stacked_grads, stacked_params, momentum_buffer, second_momentum_buffer,
                     momentum_t, lr_t, wd_t, beta2_t, ns_steps, red_dim):
     # Nesterov momentum
@@ -435,7 +481,7 @@ HEAD_DIM = 128          # target head dimension for attention
 WINDOW_PATTERN = "SSSL" # sliding window pattern: L=full, S=half context
 
 # Optimization
-TOTAL_BATCH_SIZE = 2**19 # ~524K tokens per optimizer step
+TOTAL_BATCH_SIZE = 4*2048*2 # converted from (~524K) to 32768 tokens per optimizer step
 EMBEDDING_LR = 0.6      # learning rate for token embeddings (Adam)
 UNEMBEDDING_LR = 0.004  # learning rate for lm_head (Adam)
 MATRIX_LR = 0.04        # learning rate for matrix parameters (Muon)
@@ -447,8 +493,8 @@ WARMDOWN_RATIO = 0.5    # fraction of time budget for LR warmdown
 FINAL_LR_FRAC = 0.0     # final LR as fraction of initial
 
 # Model size
-DEPTH = 8               # number of transformer layers
-DEVICE_BATCH_SIZE = 128  # per-device batch size (reduce if OOM)
+DEPTH = 6               # number of transformer layers # changes from 8 to 6
+DEVICE_BATCH_SIZE = 8  # per-device batch size (reduce if OOM) # from 128 to 8
 
 # ---------------------------------------------------------------------------
 # Setup: tokenizer, model, optimizer, dataloader
@@ -505,7 +551,11 @@ optimizer = model.setup_optimizer(
     weight_decay=WEIGHT_DECAY,
 )
 
-model = torch.compile(model, dynamic=False)
+
+# ---------------------------------------------------------------------------
+# model = torch.compile(model, dynamic=False) # diable this line
+# ---------------------------------------------------------------------------
+
 
 train_loader = make_dataloader(tokenizer, DEVICE_BATCH_SIZE, MAX_SEQ_LEN, "train")
 x, y, epoch = next(train_loader)  # prefetch first batch
@@ -556,11 +606,16 @@ while True:
     lrm = get_lr_multiplier(progress)
     muon_momentum = get_muon_momentum(step)
     muon_weight_decay = get_weight_decay(progress)
+    # for group in optimizer.param_groups:
+    #     group["lr"] = group["initial_lr"] * lrm
+    #     if group['kind'] == 'muon':
+    #         group["momentum"] = muon_momentum
+    #         group["weight_decay"] = muon_weight_decay
+
     for group in optimizer.param_groups:
-        group["lr"] = group["initial_lr"] * lrm
-        if group['kind'] == 'muon':
-            group["momentum"] = muon_momentum
-            group["weight_decay"] = muon_weight_decay
+        group["lr"] = 3e-4 * lrm
+
+
     optimizer.step()
     model.zero_grad(set_to_none=True)
 
@@ -628,3 +683,33 @@ print(f"total_tokens_M:   {total_tokens / 1e6:.1f}")
 print(f"num_steps:        {step}")
 print(f"num_params_M:     {num_params / 1e6:.1f}")
 print(f"depth:            {DEPTH}")
+
+
+#====================================================
+
+print("\n--- TESTING MODEL ---\n")
+
+model.eval()
+
+prompt = """Classify the following text:
+We are investing in renewable energy
+Answer:"""
+
+# Encode input
+tokens = tokenizer.encode(prompt)
+x = torch.tensor([tokens], device="cuda")
+
+# Generate tokens
+max_new_tokens = 20
+
+for _ in range(max_new_tokens):
+    with torch.no_grad():
+        logits = model(x)
+    
+    next_token = torch.argmax(logits[0, -1]).unsqueeze(0)
+    x = torch.cat([x, next_token.unsqueeze(0)], dim=1)
+
+# Decode output
+output = tokenizer.decode(x[0].tolist())
+
+print(output)

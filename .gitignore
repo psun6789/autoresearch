@@ -6,6 +6,15 @@ dist/
 wheels/
 *.egg-info
 
+.cache/
+*.pt
+*.pkl
+*.bin
+*.parquet
+__pycache__/
+.env
+
+
 # Virtual environments
 .venv
 worktrees/
