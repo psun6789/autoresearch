@@ -254,7 +254,8 @@ The following are not included in the repo:
 # 🤝 Acknowledgement
 
 This project is based on:
-    https://github.com/karpathy/autoresearch
+https://github.com/karpathy/autoresearch
+
 ----
 ----
 ----
