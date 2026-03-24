@@ -246,7 +246,26 @@ The following are not included in the repo:
 - Model trained for short duration (~5 min)  
 - Generative setup may produce noisy outputs  
 - Not directly optimized for classification accuracy  
+----
+----
 
+## Note:
+Due to stochastic training (GPU non-determinism and dynamic data loading), results may vary slightly across runs. Different runs may produce different generative outputs even with similar validation performance.
+
+----
+----
+## 🚀 Key Contributions
+
+- Adapted Karpathy’s autoresearch pipeline to run on **Windows + RTX GPU**
+- Replaced unsupported components:
+  - Flash Attention → PyTorch SDPA
+  - Muon Optimizer → AdamW
+  - Disabled Triton / torch.compile
+- Optimized model:
+  - Reduced size: **26M → 14.5M params**
+  - Improved performance: **BPB 1.17 → 0.52**
+- Built custom ESG classification dataset using instruction tuning
+- Implemented inference + decoding + output cleaning
 ----
 ----
 ----
@@ -258,6 +277,3 @@ https://github.com/karpathy/autoresearch
 
 ----
 ----
-----
-----
-
