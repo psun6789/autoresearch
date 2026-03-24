@@ -62,20 +62,29 @@ pip install -r requirements.txt
 ----
 ----
 ## 2. Data Conversion Script
-    Then converted into Parquet format for compatibility with the training pipeline.
+Then converted into Parquet format for compatibility with the training pipeline.
+
 ----
     convert_csv_to_parquet.py
 ----
+
+This will create: 
+1. shard_00000.parquet
+2. shard_06542.parquet
+
+Data file will be created @ C:\Users\__Username__\ .cache\autoresearch\data
+
 ----
 ## 3. Tokenizer Training
 ```bash
 python prepare.py --num-shards 0
 ```
-----
-    This generates:
-    1. tokenizer.pkl
-    2. token_bytes.pt
-----
+This generates:
+1. tokenizer.pkl
+2. token_bytes.pt
+
+@ C:\Users\__Username__\ .cache\autoresearch\tokenizer
+
 ----
 
 ## 4. Model Training
@@ -122,22 +131,66 @@ TOTAL_BATCH_SIZE
 → Converted classification → instruction format
 
 ---
-## 6.Results
+## 6. Results
 
-    Model size: ~26M parameters
-    Training time: ~5 minutes
-    Tokens processed: ~2.3M
-    Validation BPB: ~1.17
+### 🔹 First Experiment (Baseline)
+
+- Model size: ~26M parameters  
+- Training time: ~5 minutes  
+- Tokens processed: ~2.3M  
+- Validation BPB: ~1.17  
+
+---
+
+### 🔹 Second Experiment (Optimized)
+
+- Model size: ~14.5M parameters (**~44% reduction**)  
+- Training time: ~5 minutes  
+- Tokens processed: ~2.3M  
+- Validation BPB: **0.52 (↓ from 1.17)**  
+
+---
+
+### Key Improvements
+
+- Reduced model size while improving performance  
+- Optimized tokenizer (8192 → 2044 vocab size)  
+- Significant reduction in validation loss (BPB ↓ ~55%)  
+- More efficient training on limited GPU resources  
+
 ---
 ## 6.Example Inference
+### 🔹 First Experiment (Baseline)
     Input:
         Classify the following text:
         We are investing in renewable energy
     Answer:
 
-    Output:
-    Environmental
+    Output (raw) :
+    Non-Environmental<|reserved_0|>Classify the following text:
+
+### 🔹 Second Experiment (Optimized)
+    Input:
+        Classify the following text:
+        We are investing in renewable energy
+    Answer:
+
+    Output (Cleaned):
+    Non-Environmental
 ---
+
+---
+
+### ⚠️ Note on Outputs
+
+- The model is trained as a **generative language model**, not a strict classifier  
+- Raw outputs may include:
+  - special tokens (`<|reserved_0|>`)
+  - continuation of next prompt  
+- Simple post-processing is applied to extract the final label  
+
+---
+
 ## 7. Challenges Faced
 
     1. Flash Attention not supported on Windows
@@ -186,12 +239,24 @@ The following are not included in the repo:
     .parquet files (large)
     .pt, .pkl files
 ----
-----
-----
 
+## 12. Limitations
+
+- Small dataset size limits generalization  
+- Model trained for short duration (~5 min)  
+- Generative setup may produce noisy outputs  
+- Not directly optimized for classification accuracy  
+
+----
+----
+----
+----
 # 🤝 Acknowledgement
 
 This project is based on:
     https://github.com/karpathy/autoresearch
+----
+----
+----
 ----
 

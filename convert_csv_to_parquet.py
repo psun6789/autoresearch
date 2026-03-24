@@ -22,4 +22,4 @@ pq.write_table(pa.Table.from_pandas(new_df), os.path.join(data_dir, "shard_00000
 # Save VALIDATION shard (REQUIRED NAME)
 pq.write_table(pa.Table.from_pandas(new_df.sample(frac=0.2)), os.path.join(data_dir, "shard_06542.parquet"))
 
-print("✅ Data ready")
+print(" Data ready")

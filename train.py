@@ -698,12 +698,26 @@ Answer:"""
 tokens = tokenizer.encode(prompt)
 x = torch.tensor([tokens], device="cuda")
 
-for _ in range(20):
+for _ in range(30):
     with torch.no_grad(), torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
         logits = model(x)
 
-    next_token = torch.argmax(logits[0, -1]).unsqueeze(0)
+    probs = torch.softmax(logits[0, -1] / 0.7, dim=-1)  # temperature = 0.7
+    next_token = torch.multinomial(probs, num_samples=1)
+
     x = torch.cat([x, next_token.unsqueeze(0)], dim=1)
 
+    decoded = tokenizer.decode(x[0].tolist())
+
+    if "\n" in decoded[len(prompt):]:
+        break
+
 output = tokenizer.decode(x[0].tolist())
-print(output)
+
+# Extract answer
+if "Answer:" in output:
+    answer = output.split("Answer:")[-1].strip().split("\n")[0]
+else:
+    answer = output
+
+print("Prediction:", answer)
