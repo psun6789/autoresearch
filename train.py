@@ -695,21 +695,15 @@ prompt = """Classify the following text:
 We are investing in renewable energy
 Answer:"""
 
-# Encode input
 tokens = tokenizer.encode(prompt)
 x = torch.tensor([tokens], device="cuda")
 
-# Generate tokens
-max_new_tokens = 20
-
-for _ in range(max_new_tokens):
-    with torch.no_grad():
+for _ in range(20):
+    with torch.no_grad(), torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
         logits = model(x)
-    
+
     next_token = torch.argmax(logits[0, -1]).unsqueeze(0)
     x = torch.cat([x, next_token.unsqueeze(0)], dim=1)
 
-# Decode output
 output = tokenizer.decode(x[0].tolist())
-
 print(output)

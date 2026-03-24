@@ -28,7 +28,7 @@ import torch
 # ---------------------------------------------------------------------------
 
 MAX_SEQ_LEN = 2048       # context length
-TIME_BUDGET = 1800        # changed from 1800 to 300training time budget in seconds (5 minutes)
+TIME_BUDGET = 300        # changed from 1800 to 300training time budget in seconds (5 minutes)
                             # 1800 would take more time for execution
 EVAL_TOKENS = 40 * 524288  # number of tokens for val eval
 
